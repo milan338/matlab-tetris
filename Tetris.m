@@ -247,14 +247,10 @@ function onKeyPress(~, event, gd)
     % Handle input
     switch event.Key
         case 'leftarrow'
-            if isBoundCollision(gd, 'left')
-                return;
-            end
+            if isBoundCollision(gd, 'left'), return, end
             gd.xPos = gd.xPos - 1;
         case 'rightarrow'
-            if isBoundCollision(gd, 'right')
-                return;
-            end
+            if isBoundCollision(gd, 'right'), return, end
             gd.xPos = gd.xPos + 1;
         case 'uparrow'
             % Rotate piece 90 degrees anticlockwise, i.e. 3 times clockwise
@@ -266,15 +262,10 @@ function onKeyPress(~, event, gd)
             if ~validIntersection
                 return;
             % Push piece into valid position
-            else
-                switch pDir
-                    case 'left'
-                        gd.xPos = gd.xPos - pDist;
-                    case 'right'
-                        gd.xPos = gd.xPos + pDist;
-                    case 'up'
-                        gd.yPos = gd.yPos + pDist;
-                end
+            elseif pDir
+                [x, y] = getPushDirs(pDir);
+                gd.xPos = gd.xPos + pDist * x;
+                gd.yPos = gd.yPos + pDist * y;
             end
             % Rotate actual piece on playfield
             gd.currentPiece = currentPieceRot;
@@ -301,44 +292,35 @@ function [validIntersection, pushDir, pushDist] = ...
             if piece(row, col)
                 fieldRow = yPos - row + 1;
                 fieldCol = xPos + col - 1;
-                % Check if cell already exists in playfield and is
-                % Not part of the non rotated piece, or if intersects
-                % With playfield edges
+                % If cell exists in playfield and not part of rotated piece
+                % Or if intersects with playfield edges
                 if fieldCol < 1 || fieldCol > gd.COLS ...
                     || fieldRow < 1 || fieldRow > gd.ROWS ...
                     || (gd.playfield(fieldRow, fieldCol) && ...
                      ~ismember([fieldRow, fieldCol], gd.lastPiecePos, 'rows'))
-                    collisions = collisions + 1;
                     % Don't push piece more than it's width - 3
                     if i > pieceRows - 3 || noRecursion
                         return;
                     end
-                    % Check for intersections in alternate positions, if
-                    % Already checking one direction, keep checking only
-                    % In that direction
-                    vInt = false;
-                    % Intersection from bottom, push up 1
-                    if i == 0 || strcmp(dir, 'up')
-                        [vInt, pDir, pDst] = getValidIntersection( ...
-                            gd, piece, xPos, yPos + 1, 'up', i + 1, false);
-                    end
-                    % Cannot be pushed up, push to right
-                    if (~vInt && i == 0) || strcmp(dir, 'right')
-                        [vInt, pDir, pDst] = getValidIntersection( ...
-                            gd, piece, xPos + 1, yPos, 'right', i + 1, false);
-                    end
-                    % Cannot be pushed right, push to left
-                    if (~vInt && i == 0) || strcmp(dir, 'left')
-                        [vInt, pDir, pDst] = getValidIntersection( ...
-                            gd, piece, xPos - 1, yPos, 'left', i + 1, false);
-                    end
-                    % Piece can be pushed into valid position
-                    if vInt
-                        pushDir = pDir;
-                        pushDist = pDst;
-                        validIntersection = true;
-                        return;
-                    end
+                    collisions = collisions + 1;
+                    break;
+                end
+            end
+        end
+    end
+    % Check for intersections in alternate positions, if already checking a
+    % Direction in a recursion, keep checking only in that direction
+    if collisions
+        dirs = {'up', 0, 1; 'right', 1, 0; 'left', -1, 0};
+        for j = 1:size(dirs, 1)
+            if i == 0 || strcmp(dir, dirs{j, 1})
+                [vInt, pushDir, pushDist] = getValidIntersection( ...
+                    gd, piece, xPos + dirs{j, 2}, yPos + dirs{j, 3}, ...
+                    dirs{j, 1}, i + 1, false);
+                % Piece can be pushed into valid position
+                if vInt
+                    validIntersection = true;
+                    return;
                 end
             end
         end
@@ -349,19 +331,17 @@ end
 
 % Check for collisions around the piece
 function collides = isBoundCollision(gd, direction)
-    xDelta = 0;
-    yDelta = 0;
-    switch direction
-        case 'left'
-            xDelta = -1;
-        case 'right'
-            xDelta = 1;
-        case 'down'
-            yDelta = -1;
-    end
+    [xDelta, yDelta] = getPushDirs(direction);
     % Check if the piece will intersect if moved
     [validIntersection] = getValidIntersection( ...
         gd, gd.currentPiece, gd.xPos + xDelta, gd.yPos + yDelta, '', 0, true);
     % If there is no valid intersection, the piece collides
     collides = ~validIntersection;
+end
+
+% Get x and y deltas for pushing piece to direction
+function [x, y] = getPushDirs(dir)
+    dirs = struct('left', [-1, 0], 'right', [1, 0], 'up', [0, 1], 'down', [0, -1]);
+    x = dirs.(dir)(1);
+    y = dirs.(dir)(2);
 end
